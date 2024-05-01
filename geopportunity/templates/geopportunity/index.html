@@ -1,10 +1,15 @@
 <p>Enter Your Site Address:</p>
 
-<form action="">
-  Street Address: <input type="text" name="street"></input>
-  City: <input type="text" name="city"></input>
-  State: <input type="text" name="state"></input>
-  Zip: <input type="text" name="zip"></input>
-  <input type="submit" value="Submit">
+<form action="/geopportunity/" method="get">
+  Street Address: <input type="text" name="street">{{ street }}</input>
+  City: <input type="text" name="city">{{ city }}</input>
+  State: <input type="text" name="state">{{ state }}</input>
+  Zip: <input type="text" name="zip">{{ zip }}</input>
+  <input type="submit" value="Lookup">
 </form>
 
+
+<p>Latitude: {{ lat }}  Longitude: {{ lon }}</p>
+<p>Your local Balancing Authority: {{ ba_name }}</p>
+
+{% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
