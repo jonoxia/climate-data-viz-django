@@ -20,6 +20,7 @@ WORKDIR /app
 
 COPY --from=builder /app/venv venv
 COPY django_framework django_framework
+COPY geopportunity geopportunity
 
 EXPOSE ${PORT}
 
