@@ -3,6 +3,8 @@ from django.http import HttpResponse
 import requests
 import json
 import os
+import pandas as pd
+from geopportunity.utils import find_egrid_subregion
 
 # Support CSV upload of multiple addresses OR multi-form for addresses
 # 
@@ -10,6 +12,8 @@ import os
 
 # for sure 4 other layers: (Wind, solar, geothermal, and energy efficiency)
  # reach out to DOT for weirder maps
+
+
 
 def google_geocode(address):
     url = 'https://maps.googleapis.com/maps/api/geocode/json'
@@ -58,8 +62,13 @@ def index(request):
         lat, lon = google_geocode(request.GET["street"] + ", " + request.GET["city"] + ", " + request.GET["state"] + " " + request.GET["zip"])
         context["lat"] = lat
         context["lon"] = lon
-        
-        context["ba_name"] = "Something"
+
+        # find_egrid_subregion takes a pandas frame:
+        user_data = pd.DataFrame(data = {"zip_chara": [ request.GET["zip"] ]})
+        user_data = find_egrid_subregion(user_data)
+
+        ba_names = user_data["eGRID_subregion"].values[0]
+        context["ba_name"] = " ".join(ba_names)
     else:
         context["error_message"] = "You need to submit a zip code"
 
