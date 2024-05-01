@@ -3,4 +3,5 @@ from django.http import HttpResponse
 
 
 def index(request):
-    return HttpResponse("Placeholder for Terra.do Geopportunity index.")
+    context = {}
+    return render(request, "geopportunity/index.html", context)
