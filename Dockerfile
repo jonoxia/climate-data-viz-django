@@ -6,6 +6,8 @@ RUN python3 -m venv venv
 ENV VIRTUAL_ENV=/app/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
+RUN apt-get update && apt-get install -y python3-distutils python3-pip
+
 COPY requirements.txt .
 RUN pip3 install -r requirements.txt
 
