@@ -2,7 +2,7 @@
 
 
 import pandas as pd
-
+import re
 
 def find_egrid_subregion(UserInput):
     """
@@ -62,3 +62,48 @@ def find_emisssions_for_grid_region(region):
     EmissionFactors_eGRID2022.columns = ["eGRID_subregion", "CO2e_lb/MWh"]
 
     
+
+
+
+# Tim's Code:
+
+def valid_zip_code(zip_code):
+    # allows 3,4,5 and 5,3 digit zipcodes
+    pattern = r'^\d{3,5}(?:-\d{4})?$'
+    return re.match(pattern, str(zip_code)) is not None
+
+
+STATES_ABBREV = "AL, AK, AZ, AR, CA, CO, CT, DE, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, SD, TN, TX, UT, VT, VA, WA, WV, WI, WY, AS, DC, FM, GU, MH, MP, PW, PR, VI"
+
+def generate_dsire_url(in_zip=None, state_abbreviation=None):
+    dsire_url = "https://www.dsireusa.org/"
+    if in_zip:
+        in_zip = str(in_zip)
+        if valid_zip_code(in_zip):
+            dsire_url = f"https://programs.dsireusa.org/system/program?zipcode={in_zip}"
+    elif state_abbreviation:
+        if state_abbreviation.upper() in STATES_ABBREV:
+            dsire_url = f"https://programs.dsireusa.org/system/program/{state_abbreviation.lower()}"
+        else:
+            print(f"Your state abbreviation not in:\n{STATES_ABBREV}")
+    else:
+        print(f"\nSomething amiss in use of: generate_dsire_url\n")
+    return dsire_url
+
+
+def tests_for_generate_dsire_url():
+    test_my_zip_int = generate_dsire_url(in_zip=94901)
+    test_my_zip_str = generate_dsire_url(in_zip='94901')
+    test_zips = [test_my_zip_int, test_my_zip_str]
+
+    test_my_abbrev_ok_lower = generate_dsire_url(state_abbreviation='ca')
+    test_my_abbrev_ok_upper = generate_dsire_url(state_abbreviation='CA')
+    test_states = [test_my_abbrev_ok_lower, test_my_abbrev_ok_upper]
+
+    test_fail_zip_str = generate_dsire_url(in_zip='a')
+    test_fail_non_zip = generate_dsire_url(in_zip=123456)
+    test_fail_to_default = [test_fail_zip_str, test_fail_non_zip]
+
+    tests = test_zips + test_states + test_fail_to_default
+    [print(test) for test in tests]
+

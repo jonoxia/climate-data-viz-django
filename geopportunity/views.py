@@ -4,7 +4,7 @@ import requests
 import json
 import os
 import pandas as pd
-from geopportunity.utils import find_egrid_subregion
+from geopportunity.utils import find_egrid_subregion, generate_dsire_url
 
 # Support CSV upload of multiple addresses OR multi-form for addresses
 # 
@@ -69,6 +69,10 @@ def index(request):
 
         ba_names = user_data["eGRID_subregion"].values[0]
         context["ba_name"] = " ".join(ba_names)
+
+        context["dsire_url"] = generate_dsire_url(
+            in_zip = request.GET["zip"],
+            state_abbreviation = request.GET["state"])                                       
     else:
         context["error_message"] = "You need to submit a zip code"
 

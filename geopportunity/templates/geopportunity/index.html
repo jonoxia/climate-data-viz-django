@@ -12,4 +12,6 @@
 <p>Latitude: {{ lat }}  Longitude: {{ lon }}</p>
 <p>Your local Balancing Authority: {{ ba_name }}</p>
 
+{% if dsire_url %}<p><a href="{{ dsire_url }}">DSIRE incentive programs list</a>{% endif %}
+
 {% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
