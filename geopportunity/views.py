@@ -6,13 +6,19 @@ import os
 import pandas as pd
 from geopportunity.utils import find_egrid_subregion, generate_dsire_url
 
+from .forms import UploadFileForm
+
 # Support CSV upload of multiple addresses OR multi-form for addresses
 # 
 # size based on emissions ( = the MWh/year you entered times the megatons CO2 based on your grid)
 
 # for sure 4 other layers: (Wind, solar, geothermal, and energy efficiency)
- # reach out to DOT for weirder maps
+# reach out to DOT for weirder maps
 
+
+
+ # Geocode API cache model:
+ #   - address, lat, lon, date cached
 
 
 def google_geocode(address):
@@ -24,6 +30,11 @@ def google_geocode(address):
     # before starting the django server.
 
     api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+
+    # TODO check whether we already have a result for this address in our cache!!
+    # matches = GeocodeCache.objects.query(address=address)
+    # if len(matches) > 0:
+    #    return matches[0].lat, matches[0].lon
     
     # private.
     params = {
@@ -38,6 +49,12 @@ def google_geocode(address):
             location = google_data["results"][0]["geometry"]["location"]
             lat = location["lat"]
             lng = location["lng"]
+
+
+            # Cache it:
+            # new_entry = GeocodeCache(address = address, lat=lat, lon=lng)
+            # new_entry.save()
+            
             return lat, lng
 
         else:
@@ -50,30 +67,80 @@ def google_geocode(address):
         return 0, 0
 
 
+def proc_address_frame(user_data):
+
+
+    # find_egrid_subregion takes a pandas frame:
+    user_data = find_egrid_subregion(user_data)
+
+    lats = []
+    lons = []
+    dsire_urls = []
+    
+    for idx, row in user_data.iterrows():
+        lat, lon = google_geocode(row["street"] + ", " + row["city"] + ", " + row["state"] + " " + row["zip_chara"])
+
+        dsire_url = generate_dsire_url(
+            in_zip = row["zip_chara"],
+            state_abbreviation = row["state"])
+
+        lats.append(lat)
+        lons.append(lon)
+        dsire_urls.append(dsire_url)
+        
+    user_data["lat"] = lats
+    user_data["lon"] = lons
+    user_data["dsire_url"] = dsire_urls
+
+    return user_data
+
  
 def index(request):
 
     context = {"lat": "Unknown",
                "lon": "Unknown",
-               "ba_name": "Unknown"}
+               "egrid_name": "Unknown"}
+    for key in ["street", "city", "state", "zip"]:
+        context[key] = request.GET.get(key, "")
 
     if "street" in request.GET and request.GET["street"] != "":
+        user_data = pd.DataFrame(data = {
+            "street": [ request.GET["street"]],
+            "city": [ request.GET["city"]],
+            "state": [ request.GET["state"]],
+            "zip_chara": [ request.GET["zip"] ],
+        })
+        user_data = proc_address_frame(user_data)
+        context["egrid_name"] = " ".join(user_data["eGRID_subregion"].values[0])
+        context["lat"] = user_data["lat"].values[0]
+        context["lon"] = user_data["lon"].values[0]
+        context["dsire_url"] = user_data["dsire_url"].values[0]
 
-        lat, lon = google_geocode(request.GET["street"] + ", " + request.GET["city"] + ", " + request.GET["state"] + " " + request.GET["zip"])
-        context["lat"] = lat
-        context["lon"] = lon
-
-        # find_egrid_subregion takes a pandas frame:
-        user_data = pd.DataFrame(data = {"zip_chara": [ request.GET["zip"] ]})
-        user_data = find_egrid_subregion(user_data)
-
-        ba_names = user_data["eGRID_subregion"].values[0]
-        context["ba_name"] = " ".join(ba_names)
-
-        context["dsire_url"] = generate_dsire_url(
-            in_zip = request.GET["zip"],
-            state_abbreviation = request.GET["state"])                                       
     else:
         context["error_message"] = "You need to submit a zip code"
 
     return render(request, "geopportunity/index.html", context)
+
+
+def upload_csv(request):
+
+    sites = []
+    if request.method == "POST":
+        form = UploadFileForm(request.POST, request.FILES)
+        print(repr(request.POST))
+        if form.is_valid():
+            print("Form valid")
+            user_data = pd.read_csv(request.FILES["csv_file"],
+                                    dtype={"street": str, "city": str, "state": str, "zip": str})
+            user_data["zip_chara"] = user_data["zip"]
+            user_data= proc_address_frame(user_data)
+
+            sites = user_data.to_dict(orient="records")
+            #return HttpResponseRedirect("/thanks/")
+        else:
+            print("Form invalid")
+    else:
+        form = UploadFileForm()
+
+    return render(request, "geopportunity/upload.html", {"form": form, "sites": sites})
+

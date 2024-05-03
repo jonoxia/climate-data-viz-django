@@ -1,17 +1,20 @@
 <p>Enter Your Site Address:</p>
 
 <form action="/geopportunity/" method="get">
-  Street Address: <input type="text" name="street">{{ street }}</input>
-  City: <input type="text" name="city">{{ city }}</input>
-  State: <input type="text" name="state">{{ state }}</input>
-  Zip: <input type="text" name="zip">{{ zip }}</input>
+  Street Address: <input type="text" name="street" value="{{ street }}"></input>
+  City: <input type="text" name="city" value="{{ city }}"></input>
+  State: <input type="text" name="state" value="{{ state }}"></input>
+  Zip: <input type="text" name="zip" value="{{ zip }}"></input>
   <input type="submit" value="Lookup">
 </form>
 
 
 <p>Latitude: {{ lat }}  Longitude: {{ lon }}</p>
-<p>Your local Balancing Authority: {{ ba_name }}</p>
+<p>Your local eGRID region: {{ egrid_name }}</p>
 
 {% if dsire_url %}<p><a href="{{ dsire_url }}">DSIRE incentive programs list</a>{% endif %}
 
 {% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+
+
+<p>Or <a href="/geopportunity/upload_csv">Upload a CSV</a> of multiple sites at once!</p>

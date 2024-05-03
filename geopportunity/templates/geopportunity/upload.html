@@ -1,0 +1,37 @@
+
+<p>Upload a CSV file with the following columns:
+  <ul>
+    <li>street</li>
+    <li>city</li>
+    <li>state</li>
+    <li>zip</li>
+  </ul>
+  </p>
+
+<form action="/geopportunity/upload_csv" enctype="multipart/form-data" method="post">
+    {% csrf_token %}
+    {{ form }}
+    <input type="submit" value="Submit">
+</form>
+
+{% if sites %}
+
+<table>
+  <tr><th>Street</th><th>City</th><th>State</th><th>Zip</th><th>Lat</th><th>Lon</th><th>eGRID subregion</th><th>DSIRE incentives</th></tr>
+{% for site in sites %}
+
+
+<tr>
+  <td>{{ site.street }}</td>
+  <td>{{ site.city }}</td>
+  <td>{{ site.state }}</td>
+  <td>{{ site.zip }}</td>
+  <td>{{ site.lat }}</li>
+  <td>{{ site.lon }}</li>
+  <td>{{ site.eGRID_subregion }}</td>
+  <td><a href="{{ site.dsire_url }}">DSIRE incentives</a></td>
+</tr>
+
+{% endfor %}
+
+{% endif %}
