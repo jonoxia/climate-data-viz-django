@@ -20,4 +20,5 @@ from django.urls import include, path
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('geopportunity/', include('geopportunity.urls'))
+    path('load_shifting/', include('load_shifting.urls'))
 ]
