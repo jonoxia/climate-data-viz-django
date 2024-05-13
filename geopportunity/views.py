@@ -5,7 +5,7 @@ import json
 import os
 import pandas as pd
 from geopportunity.utils import find_egrid_subregion, generate_dsire_url
-
+from django.http import JsonResponse
 from .forms import UploadFileForm
 
 # Support CSV upload of multiple addresses OR multi-form for addresses
@@ -136,11 +136,15 @@ def upload_csv(request):
             user_data= proc_address_frame(user_data)
 
             sites = user_data.to_dict(orient="records")
-            #return HttpResponseRedirect("/thanks/")
+
+            return JsonResponse(make_grafana_json(user_data))
         else:
             print("Form invalid")
     else:
         form = UploadFileForm()
 
     return render(request, "geopportunity/upload.html", {"form": form, "sites": sites})
+
+def push_visualization_json_to_grafana(user_data):
+    pass
 
