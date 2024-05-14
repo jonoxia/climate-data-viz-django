@@ -4,9 +4,11 @@ import requests
 import json
 import os
 import pandas as pd
+import datetime
 from geopportunity.utils import find_egrid_subregion, generate_dsire_url
 from django.http import JsonResponse
 from .forms import UploadFileForm
+from .models import GeocodingAPICache
 
 # Support CSV upload of multiple addresses OR multi-form for addresses
 # 
@@ -16,9 +18,9 @@ from .forms import UploadFileForm
 # reach out to DOT for weirder maps
 
 
-
- # Geocode API cache model:
- #   - address, lat, lon, date cached
+# Geocode API cache model:
+#   - address, lat, lon, date cached
+# TODO how are migrations run on server?
 
 
 def google_geocode(address):
@@ -32,11 +34,11 @@ def google_geocode(address):
     api_key = os.getenv("GOOGLE_MAPS_API_KEY")
 
     # TODO check whether we already have a result for this address in our cache!!
-    # matches = GeocodeCache.objects.query(address=address)
-    # if len(matches) > 0:
-    #    return matches[0].lat, matches[0].lon
+    matches = GeocodingAPICache.objects.filter(address=address)
+    if len(matches) > 0:
+        print("Hit cache for {}".format(address))
+        return matches[0].lat, matches[0].lon
     
-    # private.
     params = {
         "address": address,
         "key": api_key
@@ -52,8 +54,8 @@ def google_geocode(address):
 
 
             # Cache it:
-            # new_entry = GeocodeCache(address = address, lat=lat, lon=lng)
-            # new_entry.save()
+            GeocodingAPICache.objects.create(
+                address = address, lat=lat, lon=lng, date_cached=datetime.datetime.now())
             
             return lat, lng
 
@@ -125,26 +127,31 @@ def index(request):
 def upload_csv(request):
 
     sites = []
+    errors = []
     if request.method == "POST":
         form = UploadFileForm(request.POST, request.FILES)
         print(repr(request.POST))
         if form.is_valid():
-            print("Form valid")
             user_data = pd.read_csv(request.FILES["csv_file"],
                                     dtype={"street": str, "city": str, "state": str, "zip": str})
-            user_data["zip_chara"] = user_data["zip"]
-            user_data= proc_address_frame(user_data)
+            columns_ok = True
+            for required_field in ["street", "city", "state", "zip"]:
+                if not required_field in user_data.columns:
+                    errors.append("CSV missing required {} column".format(required_field))
+                    columns_ok = False
 
-            sites = user_data.to_dict(orient="records")
+            if columns_ok:
+                user_data["zip_chara"] = user_data["zip"]
+                user_data= proc_address_frame(user_data)
 
-            return JsonResponse(make_grafana_json(user_data))
+                sites = user_data.to_dict(orient="records")
+                return HttpResponseRedirect("/thanks/")
         else:
-            print("Form invalid")
+            errors = ["Form invalid"]
     else:
         form = UploadFileForm()
 
-    return render(request, "geopportunity/upload.html", {"form": form, "sites": sites})
+    return render(request, "geopportunity/upload.html",
+                  {"form": form, "sites": sites, "errors": ";".join(errors)})
 
-def push_visualization_json_to_grafana(user_data):
-    pass
 
