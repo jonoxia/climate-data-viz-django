@@ -14,7 +14,7 @@ class EIACacheTestCase(TestCase):
         pass
     
     def test_eia_cache(self):
-        ba = "ERCO"  # CASO not working today for some reason????
+        ba = "CISO"
         facets = json.dumps({"respondent": [ba]})
         start_date = datetime.datetime(year=2024, month=4, day=1)
         end_date = datetime.datetime(year=2024, month=4, day=30)

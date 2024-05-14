@@ -79,7 +79,7 @@ def cache_wrapped_get_eia_timeseries(url_segment,
         end_date = end_date,
         facets = json.dumps(facets),
         response_csv = virtual_file.read(),
-        cached_date = datetime.now()
+        cached_date = datetime.datetime.now()
     )
     virtual_file.close()
     new_cache.save()
@@ -114,6 +114,7 @@ def get_eia_timeseries_recursive(
     if include_timezone and not "timezone" in facets:
         facets = dict(**{"timezone": ["Pacific"]}, **facets)
 
+    date_format = "%Y-%m-%d"
     response = requests.get(
         api_url,
         headers={
@@ -122,8 +123,8 @@ def get_eia_timeseries_recursive(
                     "frequency": frequency,
                     "data": ["value"],
                     "facets": facets,
-                    "start": start_date.isoformat(),
-                    "end": end_date.isoformat(),
+                    "start": datetime.datetime.strftime(start_date, date_format),
+                    "end": datetime.datetime.strftime(end_date, date_format),
                     "sort": [{"column": "period", "direction": "desc"}],
                     "offset": offset,
                     "length": max_row_count,
