@@ -113,7 +113,6 @@
 	  */
 
       function change_chart_to_hour(data_series_for_hour) {
-	  console.log("Hour changed to " + JSON.stringify(data_series_for_hour));
 	  var path = svg.selectAll("path");
 	  var data0 = path.data(),
 	      data1 = pie(data_series_for_hour.values);
@@ -161,9 +160,31 @@
 
       }
 
+
+      var textData = [{"hour": 1}];
+      
+      var myText = svg.append('text')
+	  .data(textData)
+	  .attr('x', 0)
+	  .attr('y', 0)
+	  .attr('fill', '#000')
+	  .classed('dataChoose', true)
+	  .text(function(d) { return d.hour })
+      
       function change_label_to_hour( new_hour ) {
 	  console.log("Change label to " + new_hour);
-	  var text_label = svg.selectAll("text");
+	  var twelve_hour_clock_time = new_hour%12;
+	  if (twelve_hour_clock_time == 0) {
+	      twelve_hour_clock_time = 12;
+	  }
+	  if (new_hour < 12) {
+	      twelve_hour_clock_time = twelve_hour_clock_time + " am";
+	  } else {
+	      twelve_hour_clock_time = twelve_hour_clock_time + " pm";
+	  }
+	  textData = [{"hour": twelve_hour_clock_time}]
+	  
+	  /*var text_label = svg.selectAll("text");
 	  text_label.data([new_hour]);
 
 	  text_label.enter()
@@ -171,11 +192,17 @@
 	      .text( function(d) { return d })
 	      .attr("x", width/2)
 	      .attr("y", height/2)
-	      .attr("stroke", "#000000");
+	      .attr("stroke", "#000000");*/
 
 	  /*text_label.update()
 	      .text( function(d) { return d });*/
-
+	  myText.data(textData)
+	      .transition()
+	      .duration(50)
+	      .style("opacity", 0)
+	      .transition().duration(50)
+	      .style("opacity", 1)
+	      .text(function(d) { return d.hour });
       }
 
 
