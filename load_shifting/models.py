@@ -20,22 +20,16 @@ class EIAHourlyDataCache(models.Model):
 # separate cache for raw eia data and our derived data?
 
 class HourlyGenerationMixCache(models.Model):
-    # this is for post-import/export correction data
-    # One row represents 
-    generation_mwh = models.FloatField()
-    emitted_tons_co2 = models.FloatField() # calculated from fuel type, emissions_per_kwh by type, and generation
-    # Metric tons
-    fuel_type = models.CharField(max_length=16)
-    timestamp = models.DateTimeField() # we should do this with-timezone
-    generating_ba = models.CharField(max_length=32)
-    consuming_ba = models.CharField(max_length=32)
-    # way to read this table:
-    # each row is that x MWh were generated from Y fuel type in hour Z on balancing authority W and emitted
-    # Q tons of CO2
+    # this is for post-import/export corrected data
+    # One row represents
 
-#class HourlySomethingElseCache(models.Model):
-#    timestamp = models.DateTimeField() # we should do this with-timezone
-#    demand_mwh = models.FloatField()
+    cached_date = models.DateTimeField("date cached")
+    ba_name = models.CharField(max_length=32)
+    start_date = models.DateTimeField()
+    end_date = models.DateTimeField()
+    calculated_csv = models.TextField()
+    # each row of CSV is that x MWh were generated from Y fuel type in hour Z on balancing authority W and emitted
+    # Q tons of CO2
 
 
 
