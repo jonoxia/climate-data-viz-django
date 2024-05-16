@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<title>Updating pie chart d3 v4</title>
+<meta charset="utf-8">
+<style>
+
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    margin: auto;
+    position: relative;
+    width: 960px;
+  }
+
+  .line {
+      fill: none;
+      stroke: steelblue;
+      stroke-width: 2px;
+  }
+ 
+  td, th {
+      padding: 1px 4px;
+  }
+ 
+
+</style>
+<form></form>
+<p>Line chart of tons CO2/kwh by clock hour for CAISO from EIA.
+</p>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script>
+  // set the dimensions and margins of the graph
+  var margin = {top: 20, right: 20, bottom: 30, left: 50},
+  width = 960 - margin.left - margin.right,
+  height = 500 - margin.top - margin.bottom;
+ 
+  // parse the date / time
+  //var parseTime = d3.timeParse("%d-%b-%y");
+ 
+  // set the ranges
+  var x = d3.scaleLinear().range([0, width]); // was scaleTime
+  var y = d3.scaleLinear().range([height, 0]);
+ 
+  // define the line
+  var valueline = d3.line()
+      .x(function(d) { return x(d.hour); })
+      .y(function(d) { return y(d.pounds_co2_per_kwh); });
+ 
+  // append the svg obgect to the body of the page
+  // appends a 'group' element to 'svg'
+  // moves the 'group' element to the top left margin
+  var svg = d3.select("body").append("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+      .attr("transform",
+            "translate(" + margin.left + "," + margin.top + ")");
+ 
+  // Get the data
+  d3.json("/load_shifting/co2_intensity_json", function(data) {
+      // format the data
+      /*data.forEach(function(d) {
+	  d.date1 = parseTime(d.date);
+	  d.close = +d.close;
+	  });*/
+      var co2_series = data["time_series"]
+      console.log("I got this data here: " + JSON.stringify(co2_series));
+ 
+      // Scale the range of the data
+      x.domain(d3.extent(co2_series, function(d) { return d.hour; }));
+      y.domain([0, d3.max(co2_series, function(d) { return d.pounds_co2_per_kwh; })]);
+ 
+      // Add the valueline path.
+      svg.append("path")
+	  .data([co2_series]) // was []
+	  .attr("class", "line")
+	  .attr("d", valueline);
+      
+      // Add the X Axis
+      svg.append("g")
+	  .attr("transform", "translate(0," + height + ")")
+	  .call(d3.axisBottom(x));
+      
+      // Add the Y Axis
+      svg.append("g")
+	  .call(d3.axisLeft(y));
+      
+      // The table generation function
+      function tabulate(data, columns) {
+	  var table = d3.select("body").append("table")
+              .attr("style", "margin-left: 400px"),
+              thead = table.append("thead"),
+              tbody = table.append("tbody");
+	  
+	  // append the header row
+	  thead.append("tr")
+              .selectAll("th")
+              .data(columns)
+              .enter()
+              .append("th")
+              .text(function(column) { return column; });
+	  
+	  // create a row for each object in the data
+	  var rows = tbody.selectAll("tr")
+              .data(data)
+              .enter()
+              .append("tr");
+	  
+	  // create a cell in each row for each column
+	  var cells = rows.selectAll("td")
+              .data(function(row) {
+		  return columns.map(function(column) {
+                      return {column: column, value: row[column]};
+		  });
+              })
+              .enter()
+              .append("td")
+              .attr("style", "font-family: Courier") // sets the font style
+              .html(function(d) { return d.value; });
+	  
+	  return table;
+      }
+      
+      // render the table
+      var peopleTable = tabulate(co2_series, ["hour", "pounds_co2_per_kwh"]);
+ 
+});
+
+
+	  
+</script>

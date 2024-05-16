@@ -25,7 +25,7 @@ EMISSIONS_BY_FUEL = {
     "Natural gas": 0.97,
     "Wind": 0,
     "Coal": 2.30,
-    "Other": 0.86,
+    "Other": 0.86, # TODO: if i determine "Other" is mostly battery, then set this to 0 and clear cache
 }
 
 default_end_date = datetime.date.today()
@@ -49,6 +49,7 @@ def cache_wrapped_get_eia_timeseries(url_segment,
         end_date = end_date,
         facets = json.dumps(facets))
     if cache_hits.count() > 0:
+        # TODO if multiple hits, take most recent
         print("Hit Cache")
         virtual_file = StringIO()
         virtual_file.write(cache_hits[0].response_csv)
@@ -58,7 +59,6 @@ def cache_wrapped_get_eia_timeseries(url_segment,
         return cached_df
 
     print("Missed Cache")
-    import pdb; pdb.set_trace()
     result_df = get_eia_timeseries_recursive(
         url_segment,
         facets,
@@ -471,6 +471,7 @@ def cache_wrapped_hourly_gen_mix_by_ba_and_type(ba, start_date, end_date):
         start_date = start_date,
         end_date = end_date)
     if cache_hits.count() > 0:
+        # TODO if multiple hits, take most recent
         print("Hit Cache")
         virtual_file = StringIO()
         virtual_file.write(cache_hits[0].calculated_csv)
@@ -498,3 +499,27 @@ def cache_wrapped_hourly_gen_mix_by_ba_and_type(ba, start_date, end_date):
     new_cache.save()
 
     return usage_by_ba_and_type
+
+
+
+def cache_and_write_to_files():
+    # Used to save caches to files for use in unit tests
+    start_date = datetime.datetime(year=2024, month=4, day=1)
+    end_date = datetime.datetime(year=2024, month=4, day=30)
+
+    consumption_by_ba = compute_hourly_consumption_by_source_ba("CISO", start_date, end_date)
+    #self.assertEqual(set(consumption_by_ba.columns), set(["timestamp", "fromba", "Power consumed locally (MWh)"]))
+    usage_by_ba_and_type = compute_hourly_fuel_mix_after_import_export("CISO", consumption_by_ba, start_date, end_date)
+    #usage_by_ba_and_type.head()
+
+    for cache_object in EIAHourlyDataCache.objects.all():
+        facets = json.loads(cache_object.facets)
+        if "respondent" in facets:
+            num_respondents = len(facets["respondent"])
+        else:
+            num_respondents = 0
+        filename = "{}_{}_respondents.csv".format(
+            cache_object.url_segment, num_respondents)
+
+        with open(filename, "w") as outfile:
+            outfile.write(cache_object.response_csv)

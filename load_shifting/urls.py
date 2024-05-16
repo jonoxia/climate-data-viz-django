@@ -6,5 +6,6 @@ from . import views
 urlpatterns = [
     path("", views.index, name="index"),
     path("energy_mix.json", views.energy_mix_json, name="energy_mix_json"),
-    #path("upload_csv", views.upload_csv, name="upload_csv"),
+    path("co2_intensity", views.co2_intensity, name="co2_intensity"),
+    path("co2_intensity_json", views.co2_intensity_json, name="co2_intensity_json")
 ]

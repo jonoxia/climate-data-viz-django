@@ -38,7 +38,10 @@ class CO2CalculationTestCase(TestCase):
         pass
 
     def test_co2_intensity(self):
+        # what's the best 
         pass
+
+# TODO class that tests views
 
 class ImportExportBATestCase(TestCase):
     def setUp(self):
