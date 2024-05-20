@@ -21,8 +21,6 @@ class EIAHourlyDataCache(models.Model):
 
 class HourlyGenerationMixCache(models.Model):
     # this is for post-import/export corrected data
-    # One row represents
-
     cached_date = models.DateTimeField("date cached")
     ba_name = models.CharField(max_length=32)
     start_date = models.DateTimeField()
@@ -31,6 +29,15 @@ class HourlyGenerationMixCache(models.Model):
     # each row of CSV is that x MWh were generated from Y fuel type in hour Z on balancing authority W and emitted
     # Q tons of CO2
 
+
+class AllPurposeCSVCache(models.Model):
+    cache_function_name = models.TextField()
+    cached_date = models.DateTimeField("date cached")
+    key_params_json = models.TextField()
+    start_date = models.DateTimeField()
+    end_date = models.DateTimeField()
+    raw_csv = models.TextField()
+    
 
 
 

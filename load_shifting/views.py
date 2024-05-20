@@ -14,10 +14,14 @@ def index(request):
 
 
 def energy_mix_json(request):
-    # TODO get these 3 from the request:
-    ba = "CISO"
-    start_date = datetime.datetime(year=2024, month=4, day=1)
-    end_date = datetime.datetime(year=2024, month=4, day=30)
+    # TODO add some UI to choose BA and year.
+
+    ba = request.GET.get("ba") or "CISO"
+    year = int( request.GET.get("year") or "2024" )
+    
+    print("Querying for ba= {} and year = {}".format(ba, year))
+    start_date = datetime.datetime(year=year, month=4, day=1)
+    end_date = datetime.datetime(year=year, month=4, day=30)
 
     hourly_usage = get_hourly_eia_grid_mix([ba], start_date = start_date, end_date = end_date)
     hourly_usage["hour"] = pd.to_datetime(hourly_usage.period, format="ISO8601").apply(lambda x: x.hour)
@@ -52,9 +56,11 @@ def co2_intensity_json(request):
     ba = "CISO"
     start_date = datetime.datetime(year=2024, month=4, day=1)
     end_date = datetime.datetime(year=2024, month=4, day=30)
-
     
-    usage_df = cache_wrapped_hourly_gen_mix_by_ba_and_type(ba, start_date, end_date)
+    usage_df = cache_wrapped_hourly_gen_mix_by_ba_and_type(
+        ba_name=ba,
+        start_date=start_date,
+        end_date=end_date)
     # Group df by hour, not caring about source BA, sum up emissions and divide by kwh
     # to get a data frame of hourly tons-co2-per-kwh
     corrected_intensity_by_hour = usage_df[["Usage (MWh)", "emissions", "timestamp"]].groupby(
@@ -78,3 +84,16 @@ def co2_intensity_json(request):
     # BAs with a big difference between max and min (likely if there's a lot of solar and not
     # a lot of batteries) are good targets for load-shifting.
     # candlestick chart? https://observablehq.com/@d3/candlestick-chart
+
+
+def co2_intensity_candlestick_json(request):
+    with open("load_shifting/list_of_all_bas.txt", "r") as ba_file:
+        ba_text = ba_file.read()
+        all_of_bas = re.findall(r'\((\w+)\)', ba_text)
+
+    # loop through for each ba, get min and max pounds_co2_per_kwh
+    
+
+    # need a special cache for this cuz it gonna be expensive to calculate
+    # but instead of writing a new cache for everything, make a general-purpose cache table
+

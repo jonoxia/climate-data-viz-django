@@ -5,7 +5,7 @@ import requests
 import pandas as pd
 from django.conf import settings
 from io import StringIO
-from .models import EIAHourlyDataCache, HourlyGenerationMixCache
+from .models import AllPurposeCSVCache
 
 # From https://www.eia.gov/tools/faqs/faq.php?id=74&t=11
 # estimates of CO2e per kwh for fossil fuels:
@@ -32,34 +32,84 @@ default_end_date = datetime.date.today()
 default_start_date = (datetime.date.today() - datetime.timedelta(days=365))
 
 
+def cache_csv( wrapped_function ):
+    """
+    Decorator for all-purpose cacheing of any function that queries or generates a data frame.
+    Usage:
 
-def cache_wrapped_get_eia_timeseries(url_segment,
-    facets,
+        @cache_csv
+        def my_function(*args, start_date=xxx, end_date=xxxx):
+       
+    Wrapped function MUST:
+    - return a Pandas data frame
+    - take 'start_date' and 'end_date' keyword arguments
+    - use keyword arguments for any parameters that you want to use as cache keys
+
+    The function name is used as part of the cache key, so old cache entries will be invalidated
+    if the function name changes. So change the name if you are changing the semantics, and don't
+    change the name if you're not!
+    """
+
+    def wrapper(*args, **kwargs):
+
+        function_name = wrapped_function.__name__
+        if not "start_date" in kwargs:
+            raise Exception("No start_date param in function {} (params: {})".format(function_name, kwargs.keys()))
+        
+        start_date = kwargs["start_date"]
+        end_date = kwargs["end_date"]
+        key_params_json = {
+            key: kwargs[key] for key in kwargs.keys() if not key in ["start_date", "end_date"]
+        }
+
+        cache_hits = AllPurposeCSVCache.objects.filter(
+            cache_function_name = function_name,
+            key_params_json = json.dumps(key_params_json),
+            start_date = start_date,
+            end_date = end_date)
+        if cache_hits.count() > 0:
+            # Case of cache hit:
+            virtual_file = StringIO()
+            virtual_file.write(cache_hits[0].raw_csv)
+            virtual_file.seek(0)
+            cached_df = pd.read_csv( virtual_file )
+            virtual_file.close()
+            return cached_df
+
+        # Case of cache miss:
+        result_df = wrapped_function(*args, **kwargs)
+
+        # Write new cache:
+        virtual_file = StringIO()
+        result_df.to_csv(virtual_file)
+        virtual_file.seek(0)
+        new_cache = AllPurposeCSVCache.objects.create(
+            cache_function_name = function_name,
+            cached_date = datetime.datetime.now(),
+            key_params_json = json.dumps(key_params_json),
+            start_date = start_date,
+            end_date = end_date,
+            raw_csv = virtual_file.read()
+        )
+        virtual_file.close()
+        new_cache.save()
+        return result_df
+
+    return wrapper
+
+
+@cache_csv
+def cache_wrapped_get_eia_timeseries(
+    url_segment="",
+    facets={},
     value_column_name="value",
     start_date=default_start_date,
     end_date=default_end_date,
     frequency="daily",
     include_timezone=True
 ):
-    # Check cache:
-    print("Checking cache - {}".format(json.dumps(facets)))
-    cache_hits = EIAHourlyDataCache.objects.filter(
-        url_segment = url_segment,
-        start_date = start_date,
-        end_date = end_date,
-        facets = json.dumps(facets))
-    if cache_hits.count() > 0:
-        # TODO if multiple hits, take most recent
-        print("Hit Cache")
-        virtual_file = StringIO()
-        virtual_file.write(cache_hits[0].response_csv)
-        virtual_file.seek(0)
-        cached_df = pd.read_csv( virtual_file )
-        virtual_file.close()
-        return cached_df
 
-    print("Missed Cache")
-    result_df = get_eia_timeseries_recursive(
+    return get_eia_timeseries_recursive(
         url_segment,
         facets,
         value_column_name=value_column_name,
@@ -69,24 +119,6 @@ def cache_wrapped_get_eia_timeseries(url_segment,
         frequency=frequency,
         include_timezone=include_timezone
     )
-
-    # Write to cache:
-    virtual_file = StringIO()
-    result_df.to_csv(virtual_file)
-    virtual_file.seek(0)
-    print("Cacheing for facets {}".format(json.dumps(facets)))
-    new_cache = EIAHourlyDataCache.objects.create(
-        url_segment = url_segment,
-        start_date = start_date,
-        end_date = end_date,
-        facets = json.dumps(facets),
-        response_csv = virtual_file.read(),
-        cached_date = datetime.datetime.now()
-    )
-    virtual_file.close()
-    new_cache.save()
-
-    return result_df
 
 
 
@@ -461,43 +493,11 @@ def compute_hourly_fuel_mix_after_import_export(balancing_authority, energy_cons
     return usage_by_ba_and_generation_type
 
 
-def cache_wrapped_hourly_gen_mix_by_ba_and_type(ba, start_date, end_date):
-    # Check for cache hits:
 
-    # TODO probably turn this cache-wrapping into a decorator
-    print("Checking cache - {}".format(ba))
-    cache_hits = HourlyGenerationMixCache.objects.filter(
-        ba_name = ba,
-        start_date = start_date,
-        end_date = end_date)
-    if cache_hits.count() > 0:
-        # TODO if multiple hits, take most recent
-        print("Hit Cache")
-        virtual_file = StringIO()
-        virtual_file.write(cache_hits[0].calculated_csv)
-        virtual_file.seek(0)
-        cached_df = pd.read_csv( virtual_file )
-        virtual_file.close()
-        return cached_df
-
-    consumption_by_ba = compute_hourly_consumption_by_source_ba(ba, start_date, end_date)
-    usage_by_ba_and_type = compute_hourly_fuel_mix_after_import_export(ba, consumption_by_ba, start_date, end_date)
-
-    # Write to cache:
-    virtual_file = StringIO()
-    usage_by_ba_and_type.to_csv(virtual_file)
-    virtual_file.seek(0)
-    print("Cacheing for ba {}".format(ba))
-    new_cache = HourlyGenerationMixCache.objects.create(
-        ba_name = ba,
-        start_date = start_date,
-        end_date = end_date,
-        calculated_csv = virtual_file.read(),
-        cached_date = datetime.datetime.now()
-    )
-    virtual_file.close()
-    new_cache.save()
-
+@cache_csv
+def cache_wrapped_hourly_gen_mix_by_ba_and_type(ba_name=None, start_date=None, end_date=None):
+    consumption_by_ba = compute_hourly_consumption_by_source_ba(ba_name, start_date, end_date)
+    usage_by_ba_and_type = compute_hourly_fuel_mix_after_import_export(ba_name, consumption_by_ba, start_date, end_date)
     return usage_by_ba_and_type
 
 
