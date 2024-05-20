@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'geopportunity',
-    #'load_shifting'
+    'load_shifting'
 ]
 
 MIDDLEWARE = [
