@@ -4,16 +4,20 @@
 <style>
 
   body {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    margin: auto;
-    position: relative;
-    width: 960px;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   }
 
   text {
       font: 32px sans-serif;
       font-weight: bold;
       fill: black;
+  }
+
+  .clockTime {
+      text-align: center;
+  }
+  h2 {
+      text-align: center;
   }
 
   form {
@@ -23,202 +27,176 @@
   }
 
   input {
-    margin: 0 7px;
+      margin: 0 7px;
+  }
+
+  .column {
+      float: left;
+      width: 960px;
+  }
+  
+  /* Clear floats after the columns */
+  .row:after {
+      content: "";
+      display: table;
+      clear: both;
   }
 
 </style>
 <form></form>
-<p>Hourly data for CAISO from EIA. Orange = Solar, Red = Nat gas
-
-  Maybe draw a clock in the middle of the donut chart, change background from light to
-  dark to help distinguish am /pm ?
-
-  Add a drop-down menu to pick a BA.
-
-  Make the size of the circle represent total production / demand!!
-
-  Host d3.v4.min.js ourself
-</p>
+ <div class="row">
+  <div class="column" id="column-1"></div>
+  <div class="column" id="column-2"></div>
+ </div>
+ <div class="row">
+  <div class="column" id="column-3"></div>
+  <div class="column" id="column-4"></div>
+</div> 
 <script src="https://d3js.org/d3.v4.min.js"></script>
 <script>
 
-  var myDuration = 600;
-  var firstTime = true;
+  function color(d) {
+      return {
+	  "Solar": "orange",
+	  "Wind": "#17becf",
+	  "Hydro": "blue",
+	  "Nuclear": "grey",
+	  "Natural gas": "red",
+	  "Coal": "black",
+	  "Petroleum": "brown",
+	  "Other": "green"
+      }[d];
+  }
 
-  var width = 960,
-  height = 500,
-  radius = Math.min(width, height) / 2;
+  function add_pie_chart_to_page(column_div_id, param_ba, param_year) {
+      var myDuration = 600;
+      var firstTime = true;
 
-  /*var width = 960,
-  height = 500,
-  radius = Math.min(width, height) / 2;*/
-  // var color = d3.scaleOrdinal(d3.schemeCategory20);
+      var width = 960,
+	  height = 500,
+	  radius = Math.min(width, height) / 2;
 
-  
-  var pie = d3.pie()
-  .value(function(d) { return d.mwh; })
-  .sort(null);
-
-  var arc = d3.arc()
-  .innerRadius(radius - 100)
-  .outerRadius(radius - 20);
-
-  var svg = d3.select("body").append("svg")
-  .attr("width", width)
-  .attr("height", height)
-  .append("g")
-  .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
-
-
-  /*svg.append("text")
-    .text("Hour")
-    .attr("x", 0)
-    .attr("y", 0)
-    .attr("text-anchor", "middle");*/
-    /*.attr("stroke", "#ffff00")
-    .attr("fill", "#ffff00");*/
-
-
-
-  d3.json("/load_shifting/energy_mix.json", function(data) {
-
-      function color(d) {
-	  return {
-	      "Solar": "orange",
-	      "Wind": "#17becf",
-	      "Hydro": "blue",
-	      "Nuclear": "grey",
-	      "Natural gas": "red",
-	      "Coal": "black",
-	      "Petroleum": "brown",
-	      "Other": "green"
-	  }[d];
-      }
-
-      /*var label = d3.select("form").selectAll("label")
-	  .data(data["data_series"])
-	  .enter().append("label");
-
-      label.append("input")
-	  .attr("type", "radio")
-	  .attr("name", "used to be fruit")
-	  .attr("value", function(d) { return d.key; })
-	  .on("change", change_hour)
-	  .filter(function(d, i) { return !i; })
-	  .each(change_hour)
-	  .property("checked", true);
-
-      label.append("span")
-	  .text(function(d) { return d.key; });
-	  */
-
-      function change_chart_to_hour(data_series_for_hour) {
-	  var path = svg.selectAll("path");
-	  var data0 = path.data(),
-	      data1 = pie(data_series_for_hour.values);
-	  
-	  path = path.data(data1, key);
-	  
-	  path.transition()
-	      .duration(myDuration)
-	      .attrTween("d", arcTween)
-	  
-
-	  path.enter()
-	      .append("path")
-	      .each(function(d, i) {
-		  var narc = findNeighborArc(i, data0, data1, key) ;
-		  if(narc) {          
-		      this._current = narc;
-		      this._previous = narc;
-		  } else {          
-		      this._current = d;
-		  }
-	      }) 
-	      .attr("fill", function(d,i) { 
-		  return color(d.data.fuel)
-	      })
-	      .transition()
-	      .duration(myDuration)
-	      .attrTween("d", arcTween)
-	  
-	  
-	  path.exit()
-	      .transition()
-	      .duration(myDuration)
-	      .attrTween("d", function(d, index) {
-		  
-		  var currentIndex = this._previous.data.fuel;
-		  var i = d3.interpolateObject(d,this._previous);
-		  return function(t) {
-		      return arc(i(t))
-		  }
-		  
-	      })
-	      .remove()
-	  firstTime = false;
-
-      }
-
-
-      var textData = [{"hour": 1}];
+      /*var width = 960,
+	height = 500,
+	radius = Math.min(width, height) / 2;*/
+      // var color = d3.scaleOrdinal(d3.schemeCategory20);
       
-      var myText = svg.append('text')
-	  .data(textData)
-	  .attr('x', 0)
-	  .attr('y', 0)
-	  .attr('fill', '#000')
-	  .classed('dataChoose', true)
-	  .text(function(d) { return d.hour })
       
-      function change_label_to_hour( new_hour ) {
-	  console.log("Change label to " + new_hour);
-	  var twelve_hour_clock_time = new_hour%12;
-	  if (twelve_hour_clock_time == 0) {
-	      twelve_hour_clock_time = 12;
+      var pie = d3.pie()
+	  .value(function(d) { return d.mwh; })
+	  .sort(null);
+      
+      var arc = d3.arc()
+	  .innerRadius(radius - 100)
+	  .outerRadius(radius - 20);
+
+      d3.select(column_div_id).append("h2").text(param_ba + " " + param_year);
+      
+      var svg = d3.select(column_div_id).append("svg")
+	  .attr("width", width)
+	  .attr("height", height)
+	  .append("g")
+	  .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
+      
+      
+      var url = "/load_shifting/energy_mix.json?ba=" + param_ba + "&year=" + param_year;
+      console.log("Requesting URL " + url);
+      
+      d3.json(url, function(data) {
+	  	  
+	  function change_chart_to_hour(data_series_for_hour) {
+	      var path = svg.selectAll("path");
+	      var data0 = path.data(),
+		  data1 = pie(data_series_for_hour.values);
+	      
+	      path = path.data(data1, key);
+	      
+	      path.transition()
+		  .duration(myDuration)
+		  .attrTween("d", arcTween)
+	      
+	      
+	      path.enter()
+		  .append("path")
+		  .each(function(d, i) {
+		      var narc = findNeighborArc(i, data0, data1, key) ;
+		      if(narc) {          
+			  this._current = narc;
+			  this._previous = narc;
+		      } else {          
+			  this._current = d;
+		      }
+		  }) 
+		  .attr("fill", function(d,i) { 
+		      return color(d.data.fuel)
+		  })
+		  .transition()
+		  .duration(myDuration)
+		  .attrTween("d", arcTween)
+	      
+	      
+	      path.exit()
+		  .transition()
+		  .duration(myDuration)
+		  .attrTween("d", function(d, index) {
+		      
+		      var currentIndex = this._previous.data.fuel;
+		      var i = d3.interpolateObject(d,this._previous);
+		      return function(t) {
+			  return arc(i(t))
+		      }
+		      
+		  })
+		  .remove()
+	      firstTime = false;
+	      
 	  }
-	  if (new_hour < 12) {
-	      twelve_hour_clock_time = twelve_hour_clock_time + " am";
-	  } else {
-	      twelve_hour_clock_time = twelve_hour_clock_time + " pm";
-	  }
-	  textData = [{"hour": twelve_hour_clock_time}]
 	  
-	  /*var text_label = svg.selectAll("text");
-	  text_label.data([new_hour]);
-
-	  text_label.enter()
-	      .append("text")
-	      .text( function(d) { return d })
-	      .attr("x", width/2)
-	      .attr("y", height/2)
-	      .attr("stroke", "#000000");*/
-
-	  /*text_label.update()
-	      .text( function(d) { return d });*/
-	  myText.data(textData)
-	      .transition()
-	      .duration(50)
-	      .style("opacity", 0)
-	      .transition().duration(50)
-	      .style("opacity", 1)
-	      .text(function(d) { return d.hour });
-      }
-
-
-      var current_hour = 0;
-      const t = d3.interval((elapsed) => {
-	  current_hour = (current_hour + 1) % 24;
-
-	  var hour_series = data["data_series"].find((element) => element["key"] == "Hour = " + current_hour);
-	  //console.log(current_hour);
-	  change_chart_to_hour(hour_series);
-	  change_label_to_hour(current_hour);
-      }, 1000, 0);
-      
-  });
-
-  function key(d) {
+	  
+	  var textData = [{"hour": ""}];
+	  
+	  var myText = svg.append('text')
+	      .data(textData)
+	      .attr('x', -25)
+	      .attr('y', 0)
+	      .attr('fill', '#000')
+	      .classed('clockTime', true)
+	      .text(function(d) { return d.hour })
+	  
+	  function change_label_to_hour( new_hour ) {
+	      var twelve_hour_clock_time = new_hour%12;
+	      if (twelve_hour_clock_time == 0) {
+		  twelve_hour_clock_time = 12;
+	      }
+	      if (new_hour < 12) {
+		  twelve_hour_clock_time = twelve_hour_clock_time + " am";
+	      } else {
+		  twelve_hour_clock_time = twelve_hour_clock_time + " pm";
+	      }
+	      textData = [{"hour": twelve_hour_clock_time}]
+	      
+	      myText.data(textData)
+		  .transition()
+		  .duration(50)
+		  .style("opacity", 0)
+		  .transition().duration(50)
+		  .style("opacity", 1)
+		  .text(function(d) { return d.hour });
+	  }
+	  
+	  
+	  var current_hour = 0;
+	  const t = d3.interval((elapsed) => {
+	      current_hour = (current_hour + 1) % 24;
+	      
+	      var hour_series = data["data_series"].find((element) => element["key"] == "Hour = " + current_hour);
+	      //console.log(current_hour);
+	      change_chart_to_hour(hour_series);
+	      change_label_to_hour(current_hour);
+	  }, 1000, 0);
+	  
+      });
+        function key(d) {
     return d.data.fuel;
   }
 
@@ -290,4 +268,13 @@ function cloneObj(obj) {
   }
   return o;
 }
+  }
+
+  add_pie_chart_to_page("#column-1", "CISO", 2019);
+  add_pie_chart_to_page("#column-2", "CISO", 2024);
+  add_pie_chart_to_page("#column-3", "ERCO", 2019);
+  add_pie_chart_to_page("#column-4", "ERCO", 2024);
+
 </script>
+
+
