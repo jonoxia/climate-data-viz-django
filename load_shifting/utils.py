@@ -31,6 +31,8 @@ EMISSIONS_BY_FUEL = {
 default_end_date = datetime.date.today()
 default_start_date = (datetime.date.today() - datetime.timedelta(days=365))
 
+class EIAAPIExeption( Exception ):
+    pass
 
 def cache_csv( wrapped_function ):
     """
@@ -177,7 +179,7 @@ def get_eia_timeseries_recursive(
 
     print(f"{len(response_content['data'])} rows fetched")
     if len(response_content["data"]) == 0:
-        raise( Exeption("no data rows"))
+        raise( EIAAPIExeption("no data rows"))
 
     # Convert the data to a Pandas DataFrame and clean it up for plotting & analysis.
     dataframe = pd.DataFrame(response_content["data"])
@@ -429,7 +431,7 @@ def compute_hourly_fuel_mix_after_import_export(balancing_authority, energy_cons
         {"respondent": "fromba", "type-name": "generation_type"}, axis="columns"
     )
     print(len(generation_types_by_ba))
-
+    generation_types_by_ba["timestamp"] = pd.to_datetime( generation_types_by_ba["timestamp"] )
 
     """
     Okay, we've fetched all the data we need, now it's time to combine it all together!
@@ -454,7 +456,7 @@ def compute_hourly_fuel_mix_after_import_export(balancing_authority, energy_cons
     total_generation_by_source_ba = generation_types_by_ba.groupby(["timestamp", "fromba"])[
         "Generation (MWh)"
     ].sum()
-
+    generation_types_by_ba["timestamp"] = pd.to_datetime( generation_types_by_ba["timestamp"] )
     generation_types_by_ba_with_totals = generation_types_by_ba.join(
         total_generation_by_source_ba,
         how="left",
@@ -466,6 +468,7 @@ def compute_hourly_fuel_mix_after_import_export(balancing_authority, energy_cons
         / generation_types_by_ba_with_totals["Generation (MWh) Total"]
     )
     generation_types_by_ba_with_totals["timestamp"] = pd.to_datetime( generation_types_by_ba_with_totals.timestamp)
+    energy_consumed_locally_by_source_ba["timestamp"] = pd.to_datetime( energy_consumed_locally_by_source_ba["timestamp"] )
     generation_types_by_ba_with_totals_and_source_ba_breakdown = generation_types_by_ba_with_totals.merge(
         energy_consumed_locally_by_source_ba.rename(
             {"Power consumed locally (MWh)": "Power consumed locally from source BA (MWh)"},
@@ -501,6 +504,47 @@ def cache_wrapped_hourly_gen_mix_by_ba_and_type(ba_name=None, start_date=None, e
     return usage_by_ba_and_type
 
 
+@cache_csv
+def cache_wrapped_co2_boxplot_all_bas(ba_names = [], start_date=None, end_date=None):
+    # A good way to visualize this might be: bar chart with floating bars, bottom end of each bar
+    # is minimum co2 intensity, top end of each bar is maximum co2 intensity, show for each BA
+    # one year ago and each BA today.
+    # BAs with a big difference between max and min (likely if there's a lot of solar and not
+    # a lot of batteries) are good targets for load-shifting.
+    # candlestick chart? https://observablehq.com/@d3/candlestick-chart
+
+    # for each BA, will have max, min, 0.25th percentile, median, 0.75th percentile.
+    ba_stats = { "min": [], "max": [], "25%": [], "50%": [], "75%": []}
+    good_ba_names = []
+    
+    # loop through for each ba, get min and max pounds_co2_per_kwh
+    for ba_name in ba_names:
+        if ba_name in ['NSB', 'OVEC', 'EEI', 'GLHB', 'AEC', 'GRIF', ]:
+            # these return 0 rows for whatever reason
+            continue
+        try:
+            usage_df = cache_wrapped_hourly_gen_mix_by_ba_and_type(
+                ba_name=ba_name,
+                start_date=start_date,
+                end_date=end_date)
+        except EIAAPIExeption as e:
+            print("Couldn't get EIA data for {}".format(ba_name))
+            continue
+
+        # TODO: next two lines are copied from co2_intensity_json - factor these out!
+        intensity_by_hour = usage_df[["Usage (MWh)", "emissions", "timestamp"]].groupby(
+            ["timestamp"]).aggregate("sum").reset_index()
+
+        intensity_by_hour["pounds_co2_per_kwh"] = intensity_by_hour["emissions"] / (intensity_by_hour["Usage (MWh)"]*1000)
+
+        statistics = intensity_by_hour["pounds_co2_per_kwh"].describe()
+        for key in ba_stats.keys():
+            ba_stats[key].append(statistics[key])
+        good_ba_names.append(ba_name)
+
+    ba_stats["ba_names"] = good_ba_names
+    return pd.DataFrame(data=ba_stats)
+
 
 def cache_and_write_to_files():
     # Used to save caches to files for use in unit tests
@@ -523,3 +567,6 @@ def cache_and_write_to_files():
 
         with open(filename, "w") as outfile:
             outfile.write(cache_object.response_csv)
+
+
+            

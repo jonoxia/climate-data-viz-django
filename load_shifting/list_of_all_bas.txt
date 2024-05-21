@@ -1,0 +1,83 @@
+from https://www.eia.gov/electricity/gridmonitor/dashboard/electric_overview/US48/US48
+    California
+        Balancing Authority of Northern California (BANC)
+        California Independent System Operator (CISO)
+        Imperial Irrigation District (IID)
+        Los Angeles Department of Water and Power (LDWP)
+        Turlock Irrigation District (TIDC)
+    Carolinas
+        Duke Energy Progress East (CPLE)
+        Duke Energy Progress West (CPLW)
+        Duke Energy Carolinas (DUK)
+        South Carolina Public Service Authority (SC)
+        Dominion Energy South Carolina, Inc. (SCEG)
+        Alcoa Power Generating, Inc. - Yadkin Division (YAD)
+    Central
+        Southwestern Power Administration (SPA)
+        Southwest Power Pool (SWPP)
+    Texas
+        Electric Reliability Council of Texas, Inc. (ERCO)
+    Florida
+        Florida Municipal Power Pool (FMPP)
+        Duke Energy Florida, Inc. (FPC)
+        Florida Power & Light Co. (FPL)
+        Gainesville Regional Utilities (GVL)
+        City of Homestead (HST)
+        JEA (JEA)
+        Utilities Commission of New Smyrna Beach (NSB)
+        Seminole Electric Cooperative (SEC)
+        City of Tallahassee (TAL)
+        Tampa Electric Company (TEC)
+    Mid-Atlantic
+        Ohio Valley Electric Corporation (OVEC)
+        PJM Interconnection, LLC (PJM)
+    Midwest
+        Associated Electric Cooperative, Inc. (AECI)
+        Electric Energy, Inc. (EEI)
+        Louisville Gas and Electric Company and Kentucky Utilities Company (LGEE)
+        Midcontinent Independent System Operator, Inc. (MISO)
+        GridLiance (GLHB)
+    New England
+        ISO New England (ISNE)
+
+    New York
+        New York Independent System Operator (NYIS)
+    Northwest
+        Avista Corporation (AVA)
+        Bonneville Power Administration (BPAT)
+        Public Utility District No. 1 of Chelan County (CHPD)
+        Gridforce Energy Management, LLC (GRID)
+        PUD No. 1 of Douglas County (DOPD)
+        Public Utility District No. 2 of Grant County, Washington (GCPD)
+        NaturEner Power Watch, LLC (GWA)
+        Idaho Power Company (IPCO)
+        Nevada Power Company (NEVP)
+        NorthWestern Corporation (NWMT)
+        PacifiCorp East (PACE)
+        PacifiCorp West (PACW)
+        Portland General Electric Company (PGE)
+        Public Service Company of Colorado (PSCO)
+        Puget Sound Energy, Inc. (PSEI)
+        Seattle City Light (SCL)
+        City of Tacoma, Department of Public Utilities, Light Division (TPWR)
+        Western Area Power Administration - Rocky Mountain Region (WACM)
+        Western Area Power Administration - Upper Great Plains West (WAUW)
+        NaturEner Wind Watch, LLC (WWA)
+        Avangrid Renewables, LLC (AVRN)
+    Southeast
+        PowerSouth Energy Cooperative (AEC)
+        Southeastern Power Administration (SEPA)
+        Southern Company Services, Inc. - Trans (SOCO)
+    Southwest
+        Arizona Public Service Company (AZPS)
+        Arlington Valley, LLC (DEAA)
+        El Paso Electric Company (EPE)
+        Griffith Energy, LLC (GRIF)
+        Gila River Power, LLC (GRMA)
+        New Harquahala Generating Company, LLC (HGMA)
+        Public Service Company of New Mexico (PNM)
+        Salt River Project Agricultural Improvement and Power District (SRP)
+        Tucson Electric Power (TEPC)
+        Western Area Power Administration - Desert Southwest Region (WALC)
+    Tennessee
+        Tennessee Valley Authority (TVA)
