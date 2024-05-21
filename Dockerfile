@@ -20,9 +20,12 @@ WORKDIR /app
 
 COPY --from=builder /app/venv venv
 COPY django_framework django_framework
+COPY manage.py manage.py
 COPY geopportunity geopportunity
 COPY load_shifting load_shifting
 
 EXPOSE ${PORT}
+
+RUN python manage.py migrate
 
 CMD gunicorn --bind :${PORT} --workers 2 django_framework.wsgi
