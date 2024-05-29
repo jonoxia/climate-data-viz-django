@@ -4,6 +4,7 @@ import pandas as pd
 from .utils import get_hourly_eia_net_demand_and_generation, get_hourly_eia_interchange, get_hourly_eia_grid_mix
 from .utils import compute_hourly_consumption_by_source_ba, compute_hourly_fuel_mix_after_import_export, cache_wrapped_hourly_gen_mix_by_ba_and_type
 from .utils import cache_wrapped_co2_boxplot_all_bas
+from .utils import get_historical_solar_weather
 import datetime
 import json
 import re
@@ -105,3 +106,13 @@ def co2_intensity_boxplot_json(request):
     # need a special cache for this cuz it gonna be expensive to calculate
     # but instead of writing a new cache for everything, make a general-purpose cache table
 
+
+def home_simulation(request):
+
+    historical_weather_2022 = get_historical_solar_weather(
+        start_date = datetime.datetime(year=2022, month=1, day=1),
+        end_date = datetime.datetime(year=2022, month=12, day=31),
+        latitude = 44.64536116761554, longitude = -72.82704009279546)
+
+    context = {}
+    return render(request, "load_shifting/home_simulation.html", context)
