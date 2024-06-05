@@ -8,6 +8,7 @@ from io import StringIO
 from .models import AllPurposeCSVCache
 from dataclasses import dataclass
 import pvlib
+import math
 
 
 # From https://www.eia.gov/tools/faqs/faq.php?id=74&t=11
@@ -604,7 +605,9 @@ def get_historical_solar_weather(start_date = None, end_date = None, latitude=0,
 @cache_csv
 def get_historical_window_irradiance(start_date = None, end_date = None, latitude=0, longitude=0):
 
-    solar_weather_timeseries = get_historical_solar_weather(**kwargs)
+    solar_weather_timeseries = get_historical_solar_weather(
+        start_date = start_date, end_date = end_date, latitude=latitude, longitude=longitude
+    )
     
     solar_position_timeseries = pvlib.solarposition.get_solarposition(
         time=solar_weather_timeseries.index,
@@ -614,7 +617,7 @@ def get_historical_window_irradiance(start_date = None, end_date = None, latitud
         temperature=solar_weather_timeseries["temp_air"],
     )
 
-    window_irradiance = pvlibo.irradiance.get_total_irradiance(
+    window_irradiance = pvlib.irradiance.get_total_irradiance(
         90, # Window tilt (90 = vertical)
         180, # Window compass orientation (180 = south-facing)
         solar_position_timeseries.apparent_zenith,
@@ -690,16 +693,6 @@ class HomeCharacteristics:
         return self.building_volume_cu_m * HEAT_CAPACITY_FUDGE_FACTOR
 
 
-# In this cell, we put it all together and simulate the electricity usage of our HVAC system, given a year of historical weather
-# You do not need to make changes to this cell
-
-# We're modeling the effect of three external sources of energy that can affect the temperature of the home: 
-#  1. Conductive heat gain or loss through contact with the walls and roof (we ignore the floor), given outdoor temperature
-#  2. Air change heat gain or loss through air changes between air in the house and outside, given outdoor temperature
-#  3. Radiant heat gain from sun coming in south-facing windows
-
-# We then model our HVAC system as heating/cooling/off depending on whether the temperature is above or below desired setpoints
-
 def calculate_next_timestep(
     timestamp,
     indoor_temperature_c,
@@ -714,6 +707,13 @@ def calculate_next_timestep(
       2. Current outdoor temperature (from historical weather data)
       3. Current solar irradiance through south-facing windows (from historical weather data)
       4. Home and HVAC characteristics
+
+    We're modeling the effect of three external sources of energy that can affect the temperature of the home: 
+    1. Conductive heat gain or loss through contact with the walls and roof (we ignore the floor), given outdoor temperature
+    2. Air change heat gain or loss through air changes between air in the house and outside, given outdoor temperature
+    3. Radiant heat gain from sun coming in south-facing windows
+
+    We then model our HVAC system as heating/cooling/off depending on whether the temperature is above or below desired setpoints
     '''
 
     temperature_difference_c = outdoor_temperature_c - indoor_temperature_c
@@ -786,3 +786,81 @@ def calculate_next_timestep(
             "HVAC energy use (kWh)": abs(energy_from_hvac_j) / (JOULES_PER_KWH * home.hvac_overall_system_efficiency)
         }
     )
+
+
+def basic_hvac_algorithm(timestamp, indoor_temperature_c, outdoor_temperature_c, home, dt):
+    # HVAC systems are either "on" or "off", so the energy they add or remove at any one time equals their total capacity
+
+
+    if indoor_temperature_c < home.heating_setpoint_c:
+        hvac_mode = "heating"
+        energy_from_hvac_j = home.hvac_capacity_w * dt.seconds
+    elif indoor_temperature_c > home.cooling_setpoint_c:
+        hvac_mode = "cooling"
+        energy_from_hvac_j = -home.hvac_capacity_w * dt.seconds
+        # TODO: allow heating efficiency and cooling efficiency to be different.
+    else:
+        hvac_mode = "off"
+        energy_from_hvac_j = 0
+
+    return (hvac_mode, energy_from_hvac_j)
+
+def smart_hvac_algorithm(timestamp, indoor_temperature_c, outdoor_temperature_c, home, dt):
+    # TODO: if we have a smart thermostat, let's use a different algorithm here:
+    # Divide hours into cheap, average, and expensive.
+    # During average hours, keep temperature within narrow range as in basic algorithm above.
+    # During expensive hours, use a wider range (allow less comfortable temperature).
+    # During cheap hours, if an expensive hour is coming up soon (how soon?) then move the
+    # temperature as far as possible (within the wider range) in the direction of where we want it to be later.
+    # Basically banking up extra heat if heating will be more expensive later, banking up cold if cooling will be
+    # more expensive later.
+    return (hvac_mode, energy_from_hvac_j)
+
+
+def model_one_house(home, solar_weather_timeseries, window_irradiance, carbon_intensity):
+    # Since we're starting in January, let's assume our starting temperature is the heating setpoint
+    previous_indoor_temperature_c = home.heating_setpoint_c
+
+    timesteps = []
+    for timestamp in solar_weather_timeseries.index:
+        new_timestep = calculate_next_timestep(
+            timestamp=timestamp,
+            indoor_temperature_c=previous_indoor_temperature_c,
+            outdoor_temperature_c=solar_weather_timeseries.loc[timestamp].temp_air,
+            irradiance=window_irradiance.loc[timestamp].poa_direct,
+            home=home,
+        )
+        timesteps.append(new_timestep)
+        previous_indoor_temperature_c = new_timestep["Indoor Temperature (C)"]
+
+    # Estimate CO2 intensity of energy spent on HVAC depending on time of day.
+
+    house_simulation = pd.DataFrame(timesteps)
+    
+    # check that our carbon_intensity has the same number of rows (should be one per hour)
+    # as the timesteps:
+    #print("carbon intensity goes from {} to {} ".format(carbon_intensity.timestamp.min(), carbon_intensity.timestamp.max()))
+    #print("simulation goes from {} to {}".format(dataframe.timestamp.min(), dataframe.timestamp.max()))
+    #if len(carbon_intensity) != len(dataframe):
+    #    raise Exception("Given {} rows of carbon intensity for {} rows of simulation".format(len(carbon_intensity), len(dataframe)))
+    # Should I raise an exception if start dates don't match or end dates don't match?
+    # I think i'm currently off by like one hour - possibly due to time zones?
+
+
+    # Merge using hourly, non-timezoned timestamps (Assume both are in local time and
+    # that the EIA grid data is in the same timezone as the solar data. TODO: raise an exception
+    # if they are not in the same timezone.)
+    carbon_intensity["timestamp_hour_no_tz"] = pd.to_datetime(carbon_intensity.timestamp).apply(
+        lambda x: x.replace(tzinfo=None))
+    house_simulation["timestamp_hour_no_tz"] = pd.to_datetime(house_simulation.timestamp).apply(
+        lambda x: datetime.datetime(year=x.year, month=x.month,
+                                    day=x.day, hour=x.hour)
+    )
+
+    house_simulation = house_simulation.merge(carbon_intensity, how="left", on="timestamp_hour_no_tz")
+
+    house_simulation["pounds_co2"] = house_simulation["HVAC energy use (kWh)"] * house_simulation["emissions_per_kwh"]
+    
+    house_simulation.drop(columns=["timestamp_x", "timestamp_y"], inplace=True)
+    house_simulation.rename(columns={"timestamp_hour_no_tz": "timestamp"}, inplace=True)
+    return house_simulation

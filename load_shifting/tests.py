@@ -14,7 +14,7 @@ class EIACacheTestCase(TestCase):
     def setUp(self):
         pass
     
-    def donut_test_eia_cache(self):
+    def test_eia_cache(self):
         ba = "CISO"
         start_date = datetime.datetime(year=2024, month=4, day=1)
         end_date = datetime.datetime(year=2024, month=4, day=30)
@@ -47,6 +47,14 @@ class CO2CalculationTestCase(TestCase):
         pass
 
 # TODO class that tests views
+
+class HouseModelingTestCase(TestCase):
+    def setUp(self):
+        pass
+
+    def test_house_simulation(self):
+        pass
+
 
 class ImportExportBATestCase(TestCase):
     def setUp(self):
