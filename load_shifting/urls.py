@@ -10,5 +10,6 @@ urlpatterns = [
     path("co2_intensity_json", views.co2_intensity_json, name="co2_intensity_json"),
     path("co2_intensity_boxplot", views.co2_intensity_boxplot, name="co2_intensity_boxplot"),
     path("co2_intensity_boxplot_json", views.co2_intensity_boxplot_json, name="co2_intensity_boxplot_json"),
-    path("home_simulation", views.home_simulation, name="home_simulation")
+    path("home_simulation", views.home_simulation, name="home_simulation"),
+    path("home_simulation_json", views.home_simulation_json, name="home_simulation_json")
 ]

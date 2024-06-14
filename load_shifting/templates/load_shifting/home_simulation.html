@@ -1,3 +1,338 @@
-<p>Placeholder for home simulation viz</p>
+{% load static %}
 
-{{ debug }}
+<p>{{ debug }}</p>
+
+<script src="{% static 'load_shifting/d3.v4.js' %}"></script>
+
+
+<!-- Create a div where the graph will take place -->
+<div id="line_chart"></div>
+
+<div id="house_diagram"></div>
+
+<!-- future todo: house and arrows graphic -->
+
+<script>
+
+  // let's plot a line for outdoor temp and one for indoor temp just to get started.
+
+// set the dimensions and margins of the graph
+/*var margin = {top: 10, right: 30, bottom: 30, left: 60},
+    width = 1060 - margin.left - margin.right,
+    height = 1000 - margin.top - margin.bottom;
+
+// append the svg object to the body of the page
+var svg = d3.select("#line_chart")
+  .append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform",
+          "translate(" + margin.left + "," + margin.top + ")");
+*/
+
+  var house_svg = d3.select("#house_diagram")
+      .append("svg")
+      .attr("width", 1500)
+      .attr("height", 400);
+
+  var myText = house_svg
+      .append('text')
+      .attr('x', 50)
+      .attr('y', 300)
+      .attr('fill', '#fff')
+      .classed('clockTime', true)
+      .text("Time");
+
+  var outdoorTempText = house_svg
+      .append('text')
+      .attr('x', 450)
+      .attr('y', 300)
+      .attr('fill', '#fff')
+      .classed('outdoor_temp_label', true)
+      .text("0 C");
+  
+  for (var houseIndex = 0 ; houseIndex < 3; houseIndex ++) {
+      var house_svg_g = house_svg
+	  .append("g").attr("transform", "translate( " + (25 + 500 * houseIndex) + ", 25)");
+
+
+      house_svg_g
+	  .append("path")
+      //.attr("id", "house_outline_" + houseIndex)
+	  .classed("house_outline", true)
+	  .attr("fill", "none")
+	  .attr("stroke", "#000000")
+	  .attr("stroke-width", 1.5)
+	  .attr("d", "M50,100L0,100L150,0L300,100L250,100L250,250L50,250L50,100")
+
+      house_svg_g
+	  .append("text")
+	  .attr("x", 130)
+	  .attr("y", 100)
+	  .attr("fill", "#fff")
+	  .classed("house_temp_label", true)
+	  .text("20");
+
+      house_svg_g
+	  .append("circle")
+      //.attr("id", "carbon_cloud_" + houseIndex)
+	  .classed("carbon_cloud", true)
+	  .attr("stroke", "#ffffff")
+	  .attr("fill", "#606060")
+	  .attr("cx", 400)
+	  .attr("cy", 50)
+	  .attr("r", 0);
+
+      house_svg_g
+	  .append("text")
+	  .attr("x", 380)
+	  .attr("y", 50)
+	  .attr("fill", "#fff")
+	  .classed("carbon_count", true)
+	  .text("0");
+
+      var heating_indicator = house_svg_g
+          .append("g")
+      	  .classed("heating_indicator", true);
+      heating_indicator
+	  .append("circle")
+	  .attr("fill", "#ff6000")
+	  .attr("cx", 100)
+	  .attr("cy", 200)
+	  .attr("r", 25);
+      heating_indicator
+	  .append("path")
+	  .attr("d", "M75,190L100,150L125,190L75,190")
+      	  .attr("fill", "#ff6000")
+
+      var cooling_indicator = house_svg_g
+	  .append("g")
+	  .classed("cooling_indicator", true);
+      cooling_indicator
+	  .append("circle")
+      	  .attr("stroke", "#90c0ff")
+	  .attr("fill", "none")
+          .attr("stroke-width", 4)
+	  .attr("cx", 150)
+	  .attr("cy", 200)
+	  .attr("r", 30);
+      cooling_indicator
+	  .append("path")
+	  .attr("stroke", "#90c0ff")
+	  .attr("fill", "none")
+          .attr("stroke-width", 4)
+	  .attr("d", "M125,175L175,225")
+      cooling_indicator
+	  .append("path")
+	  .attr("stroke", "#90c0ff")
+	  .attr("fill", "none")
+          .attr("stroke-width", 4)
+	  .attr("d", "M175,175L125,225")
+
+      house_svg_g
+	  .append("path")
+      //.attr("id", "energy_in_arrow_" + houseIndex)
+	  .classed( "energy_in_arrow", true)
+	  .attr("stroke", "#000000")
+	  .attr("fill", "none")
+	  .attr("d", "M300,175L200,175L220,155L220,195L200,175")
+	  .attr("stroke-width", 1)
+
+      house_svg_g
+	  .append("path")
+      //.attr("id", "energy_out_arrow_" + houseIndex)
+      	  .classed( "energy_out_arrow", true)
+	  .attr("stroke", "#000000")
+	  .attr("fill", "none")
+	  .attr("d", "M200,200L300,200L280,180L280,220L300,200")
+	  .attr("stroke-width", 1)
+  }
+
+  var debug_data = null;
+
+  const temp_color_scale = d3.scaleLinear()
+	.domain([-25, 40])
+	.range(['blue', 'orange']);
+
+  function get_series_by_name(json_data, key_name) {
+      for (var i = 0; i < json_data.length; i++) {
+	  if (json_data[i].key == key_name) {
+	      return json_data[i].values;
+	  }
+      }
+      console.log("Not found: " + key_name);
+  }
+
+  const timeFormatter = d3.timeFormat("%B %d, %H:00");
+  
+//Read the data
+  d3.json("/load_shifting/home_simulation_json", function(json_data) {
+      debug_data = json_data;
+
+      console.log("I got " + json_data.house_simulation.length + " data series");
+
+      var time_series = get_series_by_name(json_data.house_simulation, "Timestamp");
+      
+      console.log("Datetime format looks like " + time_series[0]);
+
+      const parseTime = d3.utcParse("%m-%d:%H");
+      console.log("Parses to: " + parseTime(time_series[0]));
+
+      for (var i = 0; i < json_data.house_simulation.length; i++) {
+	  console.log( json_data.house_simulation[i].key  )
+      }
+      
+
+     /* console.log("x-axis domain is " + d3.extent(json_data.house_simulation[0].values, function(d) { return d.timestamp; }));
+      console.log("y-axis domain is " +d3.max(json_data.house_simulation[0].values, function(d) { return +d.n; }));
+
+      // Add X axis --> it is a date format
+      var x = d3.scaleTime() // was: scaleLinear()
+	  .domain(d3.extent(json_data.house_simulation[0].values, function(d) { return parseTime(d.timestamp); }))
+	  .range([ 0, width ]);
+      svg.append("g")
+	  .attr("transform", "translate(0," + height + ")")
+	  .call(d3.axisBottom(x).ticks(10).tickFormat( d3.timeFormat("%m-%d")));
+      
+      // Add Y axis
+      var y = d3.scaleLinear()
+	  .domain(d3.extent(json_data.house_simulation[0].values, function(d) { return +d.n; }))
+	  .range([ height, 0 ]);
+      svg.append("g")
+	  .call(d3.axisLeft(y));
+      
+      // color palette
+      var res = json_data.house_simulation.map(function(d){ return d.key }) // list of group names
+      var color = d3.scaleOrdinal()
+	  .domain(res)
+	  .range(['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999']);
+
+      console.log("X-axis transform:")
+      console.log( json_data.house_simulation[0].values[0].timestamp );
+      console.log( x(json_data.house_simulation[0].values[0].timestamp) );
+      
+      // Draw the line
+      svg.selectAll(".line")
+	  .data(json_data.house_simulation)
+	  .enter()
+	  .append("path")
+          .attr("fill", "none")
+          .attr("stroke", function(d){ return color(d.key) })
+          .attr("stroke-width", 1.5)
+          .attr("d", function(d){
+	      // called once for each data series
+	      console.log("making line for " + d.key);
+              return d3.line()
+		  .x(function(d) { return x( parseTime(d.timestamp)); }) // are NaNs
+		  .y(function(d) { return y(+d.n); })
+              (d.values)
+          })*/
+
+      var current_hour = 0;
+
+      var outdoorTempSeries = get_series_by_name(json_data.house_simulation, "Outdoor Temperature (C)");
+      var indoorTempSeries = get_series_by_name(json_data.house_simulation, "Indoor Temperature (C)");
+      var hvacModeSeries = get_series_by_name(json_data.house_simulation, "hvac_mode");
+      var energyXferSeries = get_series_by_name(json_data.house_simulation, "heat_xfer_from_outside");
+      var poundsCo2Series = get_series_by_name(json_data.house_simulation, "pounds_co2");
+
+      var timeData = [ time_series[ current_hour] ];      
+      var outdoorTempData = [ outdoorTempSeries[ current_hour] ];
+      var indoorTempData = indoorTempSeries[ current_hour];
+      var poundsCo2Cumulative = [ 0, 0, 0 ];
+      var hvacModeData = hvacModeSeries[ current_hour];
+      var energyXferData = energyXferSeries[ current_hour];
+
+
+      
+      const t = d3.interval((elapsed) => {
+	  current_hour += 1;
+	  timeData = [ time_series[ current_hour] ];
+	  indoorTempData = indoorTempSeries[ current_hour];
+	  outdoorTempData = [ outdoorTempSeries[ current_hour] ];
+	  hvacModeData = hvacModeSeries[ current_hour];
+	  energyXferData = energyXferSeries[ current_hour];
+
+	  // add to, instead of replacing, pounds of CO2:
+	  for (var z = 0; z< poundsCo2Cumulative.length; z++) {
+	      poundsCo2Cumulative[z] += poundsCo2Series[current_hour][z];
+	      // probably a way to do this more functioanlly with a map
+	  }
+	  console.log("Indoor temp data is " + indoorTempData);
+
+
+	  myText.data(timeData)
+	      .transition()
+	      .duration(0)
+	      .text(function(d) { return timeFormatter(parseTime( d))  });
+	  
+	  house_svg.data(outdoorTempData)
+	      .transition()
+	      .duration(0)
+	      .style("background-color", function(d) { return temp_color_scale(d);});
+
+	  house_svg.selectAll(".outdoor_temp_label")
+	      .data(outdoorTempData)
+	      .transition()
+	      .duration(0)
+	      .text( function(d) { return Math.floor(d) + " C"; });
+
+	  
+	  house_svg.selectAll(".house_outline")
+	      .data(indoorTempData)
+	      .transition()
+	      .duration(0)
+	      .attr("fill", function(d) { return temp_color_scale( d ); });
+
+	  house_svg.selectAll(".house_temp_label")
+	      .data(indoorTempData)
+	      .transition()
+	      .duration(0)
+	      .text( function(d) { return Math.floor(d) + " C"; });
+	  
+
+	  house_svg.selectAll(".carbon_cloud")
+	      .data(poundsCo2Cumulative)
+	      .transition()
+	      .duration(0)
+	      .attr("r", function(d) { return Math.sqrt(d); });
+
+	  house_svg.selectAll(".carbon_count")
+	      .data(poundsCo2Cumulative)
+	      .transition()
+	      .duration(0)
+	      .text(function(d) { return "" + Math.floor(d); });
+
+	  house_svg.selectAll(".heating_indicator")
+	      .data(hvacModeData)
+	      .transition()
+	      .duration(0)
+	      .attr("visibility", function(d) { return (d == "heating")?"":"hidden"; });
+	  
+	  house_svg.selectAll(".cooling_indicator")
+	      .data(hvacModeData)
+	      .transition()
+	      .duration(0)
+	      .attr("visibility", function(d) { return (d == "cooling")?"":"hidden"; });
+
+	  house_svg.selectAll(".energy_in_arrow")
+	      .data(energyXferData)
+	      .transition()
+	      .duration(0)
+	      .attr("stroke-width", function(d) { return Math.abs( d / 1000000); })
+	      .attr("visibility", function(d) { return (d > 0)?"":"hidden"; });
+	  
+	  //console.log("energy in/out is " + energyXferData[0].n);
+
+	  house_svg.selectAll(".energy_out_arrow")
+	      .data(energyXferData)
+	      .transition()
+	      .duration(0)
+	      .attr("stroke-width", function(d) { return Math.abs(d/ 1000000); })
+	      .attr("visibility", function(d) { return (d < 0)?"":"hidden"; });
+	  
+      }, 1000, 0);
+ });
+</script>
+

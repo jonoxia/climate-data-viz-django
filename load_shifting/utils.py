@@ -3,6 +3,7 @@ import json
 import os
 import requests
 import pandas as pd
+import numpy as np
 from django.conf import settings
 from io import StringIO
 from .models import AllPurposeCSVCache
@@ -38,22 +39,27 @@ default_start_date = (datetime.date.today() - datetime.timedelta(days=365))
 class EIAAPIExeption( Exception ):
     pass
 
+
 def cache_csv( wrapped_function ):
     """
-    Decorator for all-purpose cacheing of any function that queries or generates a data frame.
+    Decorator for all-purpose cacheing of any function that queries or generates a data
+    frame.
     Usage:
 
         @cache_csv
-        def my_function(*args, start_date=xxx, end_date=xxxx):
-       
+        def my_function(*args, start_date=None, end_date=None, key=value ):
+            ...
+            return df
+    
     Wrapped function MUST:
     - return a Pandas data frame
     - take 'start_date' and 'end_date' keyword arguments
     - use keyword arguments for any parameters that you want to use as cache keys
+    - always return the same data frame when called with the same arguments
 
-    The function name is used as part of the cache key, so old cache entries will be invalidated
-    if the function name changes. So change the name if you are changing the semantics, and don't
-    change the name if you're not!
+    The function name is used as part of the cache key, so old cache entries will be
+    invalidated if the function name changes. So change the name if you are changing
+    the semantics, and don't change the name if you're not!
     """
 
     def wrapper(*args, **kwargs):
@@ -577,12 +583,12 @@ def get_historical_solar_weather(start_date = None, end_date = None, latitude=0,
     # Use pvlib to fetch historical "solar weather" data for our chosen location for a specific year in the past
     # "Solar weather" is how much sun we got at this location
 
-    NREL_API_KEY = os.getenv("NREL_API_KEY") # don't see this in hex notebook (??)
+    NREL_API_KEY = os.getenv("NREL_API_KEY")
     if NREL_API_KEY is None:
         NREL_API_KEY = settings.NREL_API_KEY
     assert NREL_API_KEY is not None
 
-    NREL_API_EMAIL = os.getenv("NREL_API_EMAIL") # don't see this in hex notebook (??)
+    NREL_API_EMAIL = os.getenv("NREL_API_EMAIL")
     if NREL_API_EMAIL is None:
         NREL_API_EMAIL = settings.NREL_API_EMAIL
     assert NREL_API_EMAIL is not None
@@ -598,7 +604,6 @@ def get_historical_solar_weather(start_date = None, end_date = None, latitude=0,
         map_variables=True,
         leap_day=True,
     )
-
     return solar_weather_timeseries
             
 
@@ -608,6 +613,14 @@ def get_historical_window_irradiance(start_date = None, end_date = None, latitud
     solar_weather_timeseries = get_historical_solar_weather(
         start_date = start_date, end_date = end_date, latitude=latitude, longitude=longitude
     )
+    if "Unnamed: 0" in solar_weather_timeseries.columns:
+        # Fix incorrect index (result of cacheing)
+        solar_weather_timeseries.rename(columns = {"Unnamed: 0": "timestamp"}, inplace=True)
+        solar_weather_timeseries.set_index("timestamp", inplace=True)
+        solar_weather_timeseries.index = pd.to_datetime(solar_weather_timeseries.index)
+        # This doesn't happen if i disable @cache_csv so i think this is the DF
+        # getting a new index when it's read in from csv in the cache. Better fix this!
+
     
     solar_position_timeseries = pvlib.solarposition.get_solarposition(
         time=solar_weather_timeseries.index,
@@ -699,6 +712,7 @@ def calculate_next_timestep(
     outdoor_temperature_c,
     irradiance,
     home: HomeCharacteristics,
+    lookahead_df,
     dt=pd.Timedelta(minutes=10) # Defaulting to a timestep of 10 minute increments
 ):
     '''
@@ -715,7 +729,9 @@ def calculate_next_timestep(
 
     We then model our HVAC system as heating/cooling/off depending on whether the temperature is above or below desired setpoints
     '''
-
+    # TODO validate that home has required characteristics and input data are not
+    # null.
+    
     temperature_difference_c = outdoor_temperature_c - indoor_temperature_c
 
     # Calculate energy in to building
@@ -754,7 +770,7 @@ def calculate_next_timestep(
     # 4. Energy added or removed by the HVAC system (in Joules, J)
     if home.smart_hvac_algorithm:
         hvac_mode, energy_from_hvac_j = smart_hvac_algorithm(
-            timestamp, indoor_temperature_c, outdoor_temperature_c, home, dt)
+            timestamp, indoor_temperature_c, outdoor_temperature_c, home, lookahead_df, dt)
     else:
         hvac_mode, energy_from_hvac_j = basic_hvac_algorithm(
             timestamp, indoor_temperature_c, outdoor_temperature_c, home, dt)
@@ -783,7 +799,8 @@ def calculate_next_timestep(
             "Outdoor Temperature (C)": outdoor_temperature_c,
             "Indoor Temperature (C)": indoor_temperature_c + delta_t,
             # Actual energy consumption from the HVAC system:
-            "HVAC energy use (kWh)": abs(energy_from_hvac_j) / (JOULES_PER_KWH * home.hvac_overall_system_efficiency)
+            "HVAC energy use (kWh)": abs(energy_from_hvac_j) / (JOULES_PER_KWH * home.hvac_overall_system_efficiency),
+            "pounds_co2_per_kwh": lookahead_df.loc[timestamp, "pounds_co2_per_kwh"]
         }
     )
 
@@ -805,61 +822,151 @@ def basic_hvac_algorithm(timestamp, indoor_temperature_c, outdoor_temperature_c,
 
     return (hvac_mode, energy_from_hvac_j)
 
-def smart_hvac_algorithm(timestamp, indoor_temperature_c, outdoor_temperature_c, home, dt):
-    # TODO: if we have a smart thermostat, let's use a different algorithm here:
-    # Divide hours into cheap, average, and expensive.
-    # During average hours, keep temperature within narrow range as in basic algorithm above.
-    # During expensive hours, use a wider range (allow less comfortable temperature).
-    # During cheap hours, if an expensive hour is coming up soon (how soon?) then move the
-    # temperature as far as possible (within the wider range) in the direction of where we want it to be later.
-    # Basically banking up extra heat if heating will be more expensive later, banking up cold if cooling will be
-    # more expensive later.
-    return (hvac_mode, energy_from_hvac_j)
+def smart_hvac_algorithm(timestamp, indoor_temperature_c, outdoor_temperature_c, home, lookahead_df, dt):
+
+    look_ahead_time = timestamp + datetime.timedelta(hours=2)
+
+    if look_ahead_time > lookahead_df.index.max():
+        return basic_hvac_algorithm(
+            timestamp, indoor_temperature_c, outdoor_temperature_c, home, dt)
+    
+    future_air_temp = lookahead_df.loc[look_ahead_time, "temp_air"]
+    future_co2_intensity = lookahead_df.loc[look_ahead_time, "pounds_co2_per_kwh"]
+    
+    co2_delta = future_co2_intensity - lookahead_df.loc[timestamp, "pounds_co2_per_kwh"]
+
+    if co2_delta > 0.05:
+        # If look-ahead has more expensive CO2 than now:
+        # if look_ahead time is hotter than my temp range, overdrive cooling now down to the bottom of my range
+        # if look ahead is colder than my temp range, overdrive heating now up to the top of my range.
+        
+        overdrive_heating_benefit = co2_delta * (home.heating_setpoint_c - future_air_temp)
+        overdrive_cooling_benefit = co2_delta * (future_air_temp - home.cooling_setpoint_c)
+        if overdrive_heating_benefit > 2 or overdrive_cooling_benefit > 2:
+
+            # TODO: it's a waste to trigger overdrive in cases where we wouldn't actually
+            # be heating or cooling during the future expensive period anyway!!!
+            # (Finding the exact right time to trigger may depend on using current in-house
+            # temp to predict whether we WOULD BE heating or cooling 2 hours in the future)
+            # In fact we can get an exactly "correct" answer by predicting what our future
+            # co2 cost of heating/cooling WOULD be if we don't heat/cool now, and compare
+            # to current cost.
+            if overdrive_heating_benefit > 2 and indoor_temperature_c < home.cooling_setpoint_c:
+                # don't overdrive heating above the point that would trigger cooling!
+                hvac_mode = "heating"
+                energy_from_hvac_j = home.hvac_capacity_w * dt.seconds
+                return (hvac_mode, energy_from_hvac_j)
+            elif overdrive_cooling_benefit > 2 and indoor_temperature_c > home.heating_setpoint_c:
+                hvac_mode = "cooling"
+                energy_from_hvac_j = -home.hvac_capacity_w * dt.seconds
+                return (hvac_mode, energy_from_hvac_j)
+
+    if co2_delta < -0.05:
+        # current co2 is expensive - that is, it will be cheaper later:
+        # TODO: this is currently "always off" but that could get us
+        # pretty far outside the intended temperature range...
+        # how about, let it sit as long as we're in expanded temp range?
+        
+        expanded_temp_floor = home.heating_setpoint_c - 2
+        expanded_temp_ceiling = home.heating_setpoint_c + 2
+
+        if indoor_temperature_c < expanded_temp_floor:
+            hvac_mode = "heating"
+            energy_from_hvac_j = home.hvac_capacity_w * dt.seconds
+        elif indoor_temperature_c > expanded_temp_ceiling:
+            hvac_mode = "cooling"
+            energy_from_hvac_j = -home.hvac_capacity_w * dt.seconds
+        else:
+            hvac_mode = "off"
+            energy_from_hvac_j = 0
+
+        return (hvac_mode, energy_from_hvac_j)
+
+    # TODO: instead of just looking 2 hours ahead maybe a weighted average of
+    # 1 hour, 2 hours, 3 hours, 4 hours ahead?
+
+    # otherwise...
+    # otherwise, follow normal algorithm.
+    return basic_hvac_algorithm(
+        timestamp, indoor_temperature_c, outdoor_temperature_c, home, dt)
+    
+    
+
+def fix_timestamp_index(df):
+    # Fix incorrect index (result of cacheing)
+    # TODO - better way to do this is to check when reading CSV out of cache.
+
+    if isinstance( df.index, pd.core.indexes.range.RangeIndex):
+        
+        if "Unnamed: 0" in df.columns and not "timestamp" in df.columns:
+            df.rename(columns = {"Unnamed: 0": "timestamp"}, inplace=True)
+        df.set_index("timestamp", inplace=True)
+        df.index = pd.to_datetime(df.index)
+
+    return df
 
 
-def model_one_house(home, solar_weather_timeseries, window_irradiance, carbon_intensity):
+
+def model_one_house(home, weather_with_co2_timeseries):
     # Since we're starting in January, let's assume our starting temperature is the heating setpoint
     previous_indoor_temperature_c = home.heating_setpoint_c
 
     timesteps = []
-    for timestamp in solar_weather_timeseries.index:
+    delta_t = weather_with_co2_timeseries.index[1] - weather_with_co2_timeseries.index[0]
+
+    for timestamp in weather_with_co2_timeseries.index:
         new_timestep = calculate_next_timestep(
             timestamp=timestamp,
             indoor_temperature_c=previous_indoor_temperature_c,
-            outdoor_temperature_c=solar_weather_timeseries.loc[timestamp].temp_air,
-            irradiance=window_irradiance.loc[timestamp].poa_direct,
+            outdoor_temperature_c=weather_with_co2_timeseries.loc[timestamp].temp_air,
+            irradiance=weather_with_co2_timeseries.loc[timestamp].poa_direct,
             home=home,
+            lookahead_df = weather_with_co2_timeseries,
+            dt = delta_t
         )
+        
         timesteps.append(new_timestep)
         previous_indoor_temperature_c = new_timestep["Indoor Temperature (C)"]
 
     # Estimate CO2 intensity of energy spent on HVAC depending on time of day.
 
     house_simulation = pd.DataFrame(timesteps)
+
+    house_simulation["pounds_co2"] = house_simulation["HVAC energy use (kWh)"] * house_simulation["pounds_co2_per_kwh"]
+    house_simulation["heat_xfer_from_outside"] = house_simulation['Conductive energy (J)'] + \
+        house_simulation['Air change energy (J)'] + house_simulation['Radiant energy (J)']
+
+    return house_simulation
+
+
+def combine_house_simulation_with_co2_intensity(house_simulation, carbon_intensity):
+    # DEPRECATED
+    # Data consistency checks:
+    # TODO move these checks up
+    if len(carbon_intensity) != len(house_simulation):
+        print("WARNING: Given {} rows of carbon intensity for {} rows of simulation".format(len(carbon_intensity), len(house_simulation)))
+
+    if house_simulation.timestamp.dt.tz != carbon_intensity.timestamp.dt.tz:
+        print("WARNING: carbon intensity timezone {} but simulation timezone {}".format(carbon_intensity.timestamp.dt.tz, house_simulation.timestamp.dt.tz))
+
     
-    # check that our carbon_intensity has the same number of rows (should be one per hour)
-    # as the timesteps:
-    #print("carbon intensity goes from {} to {} ".format(carbon_intensity.timestamp.min(), carbon_intensity.timestamp.max()))
-    #print("simulation goes from {} to {}".format(dataframe.timestamp.min(), dataframe.timestamp.max()))
-    #if len(carbon_intensity) != len(dataframe):
-    #    raise Exception("Given {} rows of carbon intensity for {} rows of simulation".format(len(carbon_intensity), len(dataframe)))
     # Should I raise an exception if start dates don't match or end dates don't match?
     # I think i'm currently off by like one hour - possibly due to time zones?
-
-
+    
     # Merge using hourly, non-timezoned timestamps (Assume both are in local time and
     # that the EIA grid data is in the same timezone as the solar data. TODO: raise an exception
     # if they are not in the same timezone.)
-    carbon_intensity["timestamp_hour_no_tz"] = pd.to_datetime(carbon_intensity.timestamp).apply(
-        lambda x: x.replace(tzinfo=None))
-    house_simulation["timestamp_hour_no_tz"] = pd.to_datetime(house_simulation.timestamp).apply(
-        lambda x: datetime.datetime(year=x.year, month=x.month,
-                                    day=x.day, hour=x.hour)
+    carbon_intensity["timestamp_hour_no_tz"] = carbon_intensity.timestamp.apply(
+        lambda x: datetime.datetime(year=x.year, month=x.month, day=x.day, hour=x.hour)
+    )
+    house_simulation["timestamp_hour_no_tz"] = house_simulation.timestamp.apply(
+        lambda x: datetime.datetime(year=x.year, month=x.month, day=x.day, hour=x.hour)
     )
 
-    house_simulation = house_simulation.merge(carbon_intensity, how="left", on="timestamp_hour_no_tz")
+    house_simulation = house_simulation.merge(carbon_intensity, how="inner", on="timestamp_hour_no_tz")
 
-    house_simulation["pounds_co2"] = house_simulation["HVAC energy use (kWh)"] * house_simulation["emissions_per_kwh"]
+    # TODO move this out before deleting this function
+    house_simulation["pounds_co2"] = house_simulation["HVAC energy use (kWh)"] * house_simulation["pounds_co2_per_kwh"]
     
     house_simulation.drop(columns=["timestamp_x", "timestamp_y"], inplace=True)
     house_simulation.rename(columns={"timestamp_hour_no_tz": "timestamp"}, inplace=True)

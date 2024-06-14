@@ -114,7 +114,6 @@ class ImportExportBATestCase(TestCase):
         self.assertEqual(set(usage_by_ba_and_type.columns),
                          set(['timestamp', 'emissions_per_kwh', 'Usage (MWh)', 'emissions', 'generation_type', 'fromba']))
 
-
     def test_the_import_export_is_cached(self):
         
         ba = "CISO"
@@ -132,6 +131,7 @@ class ImportExportBATestCase(TestCase):
             ba_name=ba,
             start_date=start_date,
             end_date=end_date)
+        # Result index is not result.timestamp here...
 
         cache_hit = AllPurposeCSVCache.objects.filter(
             cache_function_name = "cache_wrapped_hourly_gen_mix_by_ba_and_type",
@@ -140,3 +140,6 @@ class ImportExportBATestCase(TestCase):
             end_date = end_date)
 
         self.assertEqual(cache_hit.count(), 1)
+
+        # TODO: test that the DF read out of cache has same timeseries index as original DF!!!
+        
